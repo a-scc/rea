@@ -19,6 +19,33 @@ const TARGET: BinaryTarget = {
 const PROVIDER = { id: "fixture", name: "Fixture provider", version: "1" };
 const PROFILE = createAnalysisProfile(PROVIDER, { loader: "default" });
 
+it("rejects a detected Evidence subject with the raw-only 6502 architecture", () => {
+  const selected = {
+    path: TARGET.path,
+    sha256: TARGET.sha256,
+    format: "raw-binary" as const,
+    architecture: "6502" as const,
+  };
+  expect(
+    createEvidence(selected, PROVIDER, {
+      operation: "inspect",
+      parameters: {},
+      result: null,
+    }).subject,
+  ).toMatchObject({ format: "raw-binary", architecture: "6502" });
+  const malformed = {
+    ...selected,
+    format: "pe" as const,
+  };
+  expect(() =>
+    createEvidence(malformed, PROVIDER, {
+      operation: "inspect",
+      parameters: {},
+      result: null,
+    }),
+  ).toThrow();
+});
+
 it("preserves omitted relationship diagnostics and authenticates reported diagnostics", () => {
   const observation = {
     operation: "procedure_callees",
@@ -460,6 +487,20 @@ describe("evidence parameter depth bound", () => {
         issue.message.includes("maximum nesting depth"),
       ),
     ).toBe(true);
+  });
+
+  it("stops semantic authentication when normalized JSON exceeds its depth bound", () => {
+    const evidence = createEvidence(TARGET, PROVIDER, {
+      operation: "health",
+      parameters: {},
+      result: true,
+    });
+    let value: unknown = 1;
+    for (let index = 0; index < 10_000; index += 1) value = { nested: value };
+
+    expect(() =>
+      parseEvidence({ ...evidence, normalized_result: value }),
+    ).toThrow(/maximum nesting depth/u);
   });
 });
 
